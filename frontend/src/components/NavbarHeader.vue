@@ -20,6 +20,8 @@
     console.log(`Selected language: ${language}`)
     emit('languageSelected', language)
 
+    selectedLanguage.value = language
+
     // Close the dropdown
     showDropdown.value = false
   }

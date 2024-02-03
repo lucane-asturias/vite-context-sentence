@@ -17,10 +17,17 @@ export const useModalStore = defineStore('modalStore', () => {
   function openModal(sentenceText) {
     modalOpen.value = true
     currentSentence.value = sentenceText
-    getExplanation()
+    getExplanationFromAI()
   }
 
-  async function getExplanation() {
+  function closeModal() {
+    modalOpen.value = false
+    modalLoading.value = false
+    modalError.value = null
+    modalExplanation.value = ''
+  }
+
+  async function getExplanationFromAI() {
     modalLoading.value = true
     // try {
     //   const response = await axios.post('/api/chatgpt/explain_sentence_ai/', { 
@@ -36,15 +43,8 @@ export const useModalStore = defineStore('modalStore', () => {
     // }
   }
 
-  function closeModal() {
-    modalOpen.value = false
-    modalLoading.value = false
-    modalError.value = null
-    modalExplanation.value = ''
-  }
-
   return { 
-    modalOpen, modalLoading, modalError, modalExplanation,
-    getExplanation, openModal, closeModal
+    openModal, closeModal,
+    modalOpen, modalLoading, modalError, modalExplanation
   }
 })
