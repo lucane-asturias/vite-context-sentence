@@ -1,14 +1,22 @@
 <script lang="ts" setup>
   import { ref } from 'vue'
+  import axios, { AxiosResponse } from 'axios'
   import { useModalStore } from '../store/modalStore'
   import { type Result } from '../interface/TatoebaType'
+
+  interface AudioResponse { audio_data: string; }
 
   const synth = window.speechSynthesis
 
   const showCheckSVG = ref<boolean>(false)
   const canStopSpeaking = ref<boolean>(false)
+
+  const audioRef = ref<HTMLAudioElement | null>(null)
+  const audioMap = new Map<string, HTMLAudioElement>()
+
+  const inSubmission = ref<boolean>(false)
   
-  const props = defineProps<{ sentence: Result; languageCode: string; }>()
+  const props = defineProps<{ sentence: Result; }>()
 
   const modalStore = useModalStore()
 
@@ -17,61 +25,77 @@
     return firstTranslation || ''
   }
 
-  function processSentence(sentence: string | Element): string {
-    let processedSentence: string
+  async function speakSentence(audioID) {
+    if (!audioID) alert("Sorry, there is no available voice for this text")
 
-    // Check if the sentence contains HTML tags
-    const containsHTML: boolean = /<[^>]+>/g.test(sentence)
+    if (inSubmission.value) return
 
-    if (!containsHTML) {
-      console.log('oi')
-      processedSentence = sentence
-    } else {
-      console.log('ola')
-      // Extract text inside <ruby> tags
-      processedSentence = cleanHTML(sentence)
-    }
-
-    return processedSentence
-  }
-
-  function cleanHTML(sentence) {
-    // Remove content inside parentheses
-    const withoutParentheses = sentence.replace(/（[^）]*）/g, '')
-    
-    // Remove any remaining HTML tags
-    const withoutTags = withoutParentheses.replace(/<[^>]+>/g, '')
-
-    // Trim any leading/trailing whitespace
-    return withoutTags.trim()
-  }
-
-  function speakSentence(sentence: string | Element) {
     if (canStopSpeaking.value) {
-      synth.cancel()
+      audioRef.value.pause() 
+      // Reset playback position to the beginning
+      audioRef.value.currentTime = 0 
       canStopSpeaking.value = false
       return
     }
 
-    const sentenceToSpeak: string = processSentence(sentence)
+    try {
+      let audio: HTMLAudioElement | undefined
 
-    console.log(sentenceToSpeak)
+      if (!audioMap.has(audioID)) {
+        inSubmission.value = true
+        canStopSpeaking.value = true
+        // Fetch audio data if it's not already stored
+        const response = await axios.post('/api/download_audio/', { 
+          audio_id: audioID 
+        }) as AxiosResponse<AudioResponse>
 
-    canStopSpeaking.value = true
+        if (response.data.audio_data) {
+          // Decode base64-encoded audio data
+          const base64AudioData: string = response.data.audio_data
+          const audioBlob: Blob = base64ToBlob(base64AudioData)
 
-    const utterance = new SpeechSynthesisUtterance(sentenceToSpeak)
-    console.log('lng_code --> ', props.languageCode)
-    utterance.lang = props.languageCode // defaults to German
-  
-    utterance.onend = () => canStopSpeaking.value = false
+          audio = new Audio()
+          audio.src = URL.createObjectURL(audioBlob)
 
-    synth.speak(utterance)
+          // Store the Audio object associated with audioID
+          audioMap.set(audioID, audio)
+        } else {
+          console.error('No audio data found in response:', response)
+          return
+        }
+      } else {
+        audio = audioMap.get(audioID)
+      }
+
+      // Reset canStopSpeaking.value when audio playback ends
+      audio.onended = () => canStopSpeaking.value = false
+
+      // Play the audio
+      audio.play()
+
+      audioRef.value = audio
+    } catch (error) {
+      console.error('Error fetching audio:', error)
+    } finally {
+      inSubmission.value = false
+    }
+  }
+
+  function base64ToBlob(base64Data: string): Blob {
+    // Decode the base64-encoded string base64Data into a string of binary data
+    const byteCharacters: string = atob(base64Data)
+    const byteNumbers: number[] = new Array(byteCharacters.length)
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i)
+    }
+    const byteArray: Uint8Array = new Uint8Array(byteNumbers)
+    return new Blob([byteArray], { type: 'audio/mpeg' })
   }
 
   function copyResponse(sentence: string) {
     if (showCheckSVG.value) return
 
-    const responseToCopy: string = processSentence(sentence)
+    const responseToCopy: string = sentence
 
     showCheckSVG.value = true
 
@@ -93,47 +117,46 @@
     <span v-else>{{ sentence.text }}</span>
 
     <small class="inline-flex items-center point ml-2 space-x-2">
-      <div 
-        @click="sentence.lang_tag === 'ja' 
-          ? speakSentence(sentence.transcriptions[0].html) 
-          : speakSentence(sentence.text)"
-        :title="canStopSpeaking ? 'Stop Sentence' : 'Read Sentence'"
-      >
-        <!-- Speak SVG -->
-        <svg 
-          v-if="!canStopSpeaking"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke-width="1.5"
-          stroke="currentColor"
-          class="w-[20px] h-[20px] text-blue-500 hover:text-blue-200 text-sm cursor-pointer"
+      <template v-if="sentence.audios.length">
+        <div 
+          @click="speakSentence(sentence.audios[0].id)"
+          :title="canStopSpeaking ? 'Stop Sentence' : 'Read Sentence'"
         >
-          <path 
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="
-              M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0
-              7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0
-              1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1
-              2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z"
-            />
-        </svg>
-        <!-- Stop SVG -->
-        <svg 
-          v-else 
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke-width="1.5"
-          stroke="currentColor"
-          class="w-[19px] h-[19px] ml-1 text-blue-100 hover:text-blue-200 text-sm cursor-pointer"
-        >
-          <!-- why two paths -->
-          <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 9.563C9 9.252 9.252 9 9.563 9h4.874c.311 0 .563.252.563.563v4.874c0 .311-.252.563-.563.563H9.564A.562.562 0 0 1 9 14.437V9.564Z" />
-        </svg>
-      </div>
+          <!-- Speak SVG -->
+          <svg 
+            v-if="!canStopSpeaking"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="1.5"
+            stroke="currentColor"
+            class="w-[19px] h-[19px] text-blue-500 hover:text-blue-200 text-sm cursor-pointer"
+          >
+            <path 
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="
+                M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0
+                7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0
+                1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1
+                2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z"
+              />
+          </svg>
+          <!-- Stop SVG -->
+          <svg 
+            v-else 
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="1.5"
+            stroke="currentColor"
+            class="w-[19px] h-[19px] ml-1 text-blue-100 hover:text-blue-200 text-sm cursor-pointer"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 9.563C9 9.252 9.252 9 9.563 9h4.874c.311 0 .563.252.563.563v4.874c0 .311-.252.563-.563.563H9.564A.562.562 0 0 1 9 14.437V9.564Z" />
+          </svg>
+        </div>
+      </template>
 
       <div @click="copyResponse(sentence.text)" :class="{ 'cursor-pointer': !showCheckSVG }" title="Copy sentence">
         <!-- Copy SVG -->
@@ -144,7 +167,7 @@
           viewBox="0 0 24 24"
           stroke-width="1.5" 
           stroke="currentColor"
-          class="w-[19px] h-[19px] text-blue-500 hover:text-blue-200 text-sm cursor-pointer"
+          class="w-[18px] h-[18px] text-blue-500 hover:text-blue-200 text-sm cursor-pointer"
         >
           <path 
             stroke-linecap="round" 
@@ -174,11 +197,11 @@
           />
         </svg>
       </div>
-      <!-- Explain sentence with ChatGPT -->
+      <!-- Explain sentence with ChatGPT (not available) -->
       <!-- <button 
         @click="modalStore.openModal(sentence.text)"
         title="Explain Sentence"
-        class="text-blue-500 hover:text-blue-200 text-sm bg-transparent border-none outline-none focus:outline-none">
+        class="text-blue-500 hover:text-blue-200 text-sm bg-transparent border-none outline-none focus:outline-none mt-1">
         Details
       </button> -->
     </small>

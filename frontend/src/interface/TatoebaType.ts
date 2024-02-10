@@ -54,7 +54,7 @@ export interface Result {
 
 export interface Audio {
     id:              number;
-    author:          Author;
+    author:          string;
     attribution_url: null;
     license:         null;
     external?:       null;

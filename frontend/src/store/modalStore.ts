@@ -14,10 +14,10 @@ export const useModalStore = defineStore('modalStore', () => {
 
   // Actions ============================
 
-  function openModal(sentenceText) {
+  async function openModal(sentenceText) {
     modalOpen.value = true
     currentSentence.value = sentenceText
-    getExplanationFromAI()
+    await getExplanationFromAI()
   }
 
   function closeModal() {
@@ -28,18 +28,18 @@ export const useModalStore = defineStore('modalStore', () => {
   }
 
   async function getExplanationFromAI() {
-    modalLoading.value = true
+    // modalLoading.value = true
     // try {
     //   const response = await axios.post('/api/chatgpt/explain_sentence_ai/', { 
     //     sentence: currentSentence 
     //   })
-    //   console.log('res', response)
+    //   console.log('res', response.data)
 
       modalExplanation.value = "Cillum duis est in aliqua pariatur amet duis qui proident commodo fugiat excepteur nulla qui minim in. Ea incididunt cupidatat in culpa ullamco voluptate aliquip sint consequat ad ea irure occaecat officia quis ad cupidatat et commodo ad amet aliquip consequat ut officia enim."
     // } catch (error) {
     //   modalError.value = 'Error fetching explanation'
     // } finally {
-      modalLoading.value = false
+    //   modalLoading.value = false
     // }
   }
 
@@ -48,3 +48,5 @@ export const useModalStore = defineStore('modalStore', () => {
     modalOpen, modalLoading, modalError, modalExplanation
   }
 })
+
+// openai.error.RateLimitError: You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.
