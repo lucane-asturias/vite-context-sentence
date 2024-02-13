@@ -65,6 +65,7 @@
         }
       } else {
         audio = audioMap.get(audioID)
+        canStopSpeaking.value = true
       }
 
       // Reset canStopSpeaking.value when audio playback ends
